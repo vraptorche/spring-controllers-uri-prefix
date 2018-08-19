@@ -2,7 +2,6 @@ package co.jware.uri.demo.spring;
 
 import co.jware.uri.demo.annotation.ApiController;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.EnvironmentAware;
@@ -24,27 +23,32 @@ public class ApiControllerAnnotationBeanPostProcessor implements BeanPostProcess
     private Environment env;
 
     @Override
-    public Object postProcessBeforeInitialization(@NotNull Object bean, String beanName) throws BeansException {
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
         ApiController annotation = AnnotationUtils.findAnnotation(bean.getClass(), ApiController.class);
         if (null != annotation) {
             RequestMapping requestMapping = AnnotationUtils.findAnnotation(bean.getClass(), RequestMapping.class);
             if (null != requestMapping) {
                 Map<String, Object> attributes = AnnotationUtils.getAnnotationAttributes(requestMapping);
                 String apiPrefix = env.getProperty("api.prefix", "/api");
-                String[] values = (String[]) attributes.get("value");
-                values = Arrays.stream(values).map(s -> apiPrefix + s).toArray(String[]::new);
-                attributes.put("value", values);
-                attributes.put("path", values);
-                RequestMapping target = AnnotationUtils.synthesizeAnnotation(attributes,
-                        RequestMapping.class, null);
-                changeAnnotationValueReflect(bean.getClass(), RequestMapping.class, target);
+                String[] values = (String[]) attributes.get("path");
+                values = Arrays.stream(values)
+                        .filter(s -> !s.startsWith(apiPrefix))
+                        .map(s -> apiPrefix + s).toArray(String[]::new);
+                if (values.length > 0) {
+                    attributes.put("value", values);
+                    attributes.put("path", values);
+                    RequestMapping target = AnnotationUtils.synthesizeAnnotation(attributes,
+                            RequestMapping.class, null);
+                    changeAnnotationValue(bean.getClass(), RequestMapping.class, target);
+//                    changeAnnotationValueMethodHandles(bean.getClass(), RequestMapping.class, target);
+                }
             }
         }
         return bean;
     }
 
     @SuppressWarnings("unchecked")
-    private static void changeAnnotationValueReflect(Class<?> targetClass, Class<? extends Annotation> targetAnnotation, Annotation targetValue) {
+    private static void changeAnnotationValue(Class<?> targetClass, Class<? extends Annotation> targetAnnotation, Annotation targetValue) {
         try {
             Method method = Class.class.getDeclaredMethod(ANNOTATION_METHOD);
             method.setAccessible(true);
@@ -59,7 +63,7 @@ public class ApiControllerAnnotationBeanPostProcessor implements BeanPostProcess
     }
 
     @Override
-    public void setEnvironment(@NotNull Environment environment) {
+    public void setEnvironment(Environment environment) {
         env = environment;
     }
 }
